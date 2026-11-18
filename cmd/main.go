@@ -13,6 +13,7 @@ import (
 
 	platformv1 "github.com/bjo3g15nw7/cron-scale-operator/api/v1alpha1"
 	"github.com/bjo3g15nw7/cron-scale-operator/internal/controller"
+	"github.com/bjo3g15nw7/cron-scale-operator/internal/events"
 )
 
 var scheme = clientgoscheme.Scheme
@@ -44,7 +45,10 @@ func main() {
 		os.Exit(1)
 	}
 
-	if err := (&controller.CronScaleReconciler{Client: mgr.GetClient()}).SetupWithManager(mgr); err != nil {
+	if err := (&controller.CronScaleReconciler{
+		Client: mgr.GetClient(),
+		Events: events.New(mgr.GetEventRecorderFor("cron-scale-operator")),
+	}).SetupWithManager(mgr); err != nil {
 		ctrl.Log.Error(err, "wiring CronScaleReconciler")
 		os.Exit(1)
 	}

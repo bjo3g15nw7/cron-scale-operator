@@ -17,23 +17,21 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	platformv1 "github.com/bjo3g15nw7/cron-scale-operator/api/v1alpha1"
+	"github.com/bjo3g15nw7/cron-scale-operator/internal/events"
 	"github.com/bjo3g15nw7/cron-scale-operator/internal/scale"
 )
 
 // CronScaleReconciler applies the open window of a CronScale to its target.
 type CronScaleReconciler struct {
 	client.Client
+	// Events publishes decisions on the object; optional.
+	Events *events.Recorder
 	// Now is injectable for tests; nil means time.Now.
 	Now func() time.Time
 }
 
 // Event reasons published on the status conditions.
-const (
-	reasonApplied = "WindowApplied"
-	reasonIdle    = "NoOpenWindow"
-	reasonFailed  = "EvaluationFailed"
-	reasonSuspend = "Suspended"
-)
+const reasonFailed = events.ReasonInvalid
 
 // Reconcile evaluates windows and patches the target replica count.
 func (r *CronScaleReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
@@ -50,7 +48,8 @@ func (r *CronScaleReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	}
 
 	if cs.Spec.Suspend {
-		return ctrl.Result{}, r.record(ctx, &cs, 0, "", reasonSuspend,
+		r.Events.Suspended(&cs)
+		return ctrl.Result{}, r.record(ctx, &cs, 0, "", events.ReasonSuspended,
 			"Reconciliation frozen by spec.suspend")
 	}
 
@@ -71,12 +70,12 @@ func (r *CronScaleReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 
 	replicas := scale.Clamp(cs.Spec.MinReplicas, cs.Spec.MinReplicas, cs.Spec.MaxReplicas)
 	window := ""
-	reason := reasonIdle
+	reason := events.ReasonNoOpenWindow
 	message := "No window is open; holding minReplicas"
 	if winner != nil {
 		replicas = scale.Clamp(winner.Replicas, cs.Spec.MinReplicas, cs.Spec.MaxReplicas)
 		window = winner.Name
-		reason = reasonApplied
+		reason = events.ReasonWindowApplied
 		message = fmt.Sprintf("Window %q holds %d replicas", window, replicas)
 	}
 
@@ -84,6 +83,7 @@ func (r *CronScaleReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		return ctrl.Result{}, r.fail(ctx, &cs, err)
 	}
 	logger.V(1).Info("applied replica decision", "window", window, "replicas", replicas)
+	r.Events.Decision(&cs, window, replicas)
 
 	requeue := time.Minute
 	if next := scale.Boundary(windows, now()); !next.IsZero() {
@@ -126,6 +126,7 @@ func (r *CronScaleReconciler) record(ctx context.Context, cs *platformv1.CronSca
 
 // fail marks the CronScale degraded and returns the error for backoff.
 func (r *CronScaleReconciler) fail(ctx context.Context, cs *platformv1.CronScale, cause error) error {
+	r.Events.Invalid(cs, cause)
 	patch := client.MergeFrom(cs.DeepCopy())
 	meta.SetStatusCondition(&cs.Status.Conditions, metav1.Condition{
 		Type:               "Degraded",
