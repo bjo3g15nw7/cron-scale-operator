@@ -1,0 +1,16 @@
+# build output
+bin/
+/manager
+
+# test and coverage artifacts
+*.test
+*.out
+coverage.html
+
+# editor and OS noise
+.idea/
+.vscode/
+.DS_Store
+
+# local cluster overrides
+config/local/
