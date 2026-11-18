@@ -1,0 +1,20 @@
+apiVersion: platform.milan.dev/v1alpha1
+kind: CronScale
+metadata:
+  name: checkout-api
+spec:
+  target:
+    kind: Deployment
+    name: checkout-api
+  timezone: Europe/Prague
+  minReplicas: 2
+  maxReplicas: 40
+  windows:
+    - name: business
+      start: "0 8 * * 1-5"
+      end: "0 18 * * 1-5"
+      replicas: 24
+    - name: night
+      start: "0 22 * * *"
+      end: "0 6 * * *"
+      replicas: 4
