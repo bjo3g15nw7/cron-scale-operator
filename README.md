@@ -80,7 +80,9 @@ that started most recently wins. With no open window the target is held at
 `spec.minReplicas`.
 
 Status fields: `activeWindow`, `desiredReplicas`, `observedGeneration`, and
-`Ready`/`Degraded` conditions carrying the reason for the last decision.
+`Ready`/`Degraded` conditions carrying the reason for the last decision. Every
+decision is also emitted as a Kubernetes event (`kubectl describe cronscale`)
+so transitions can be audited without scraping logs.
 
 ## Install
 
